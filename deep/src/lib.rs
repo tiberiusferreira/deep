@@ -7,11 +7,12 @@ pub use tensor::Tensor;
 
 use rand_core::RngCore;
 
+/// References a tensor which is produced as an output of an operation stored in the graph
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Internal {
-    /// The node to pull the input tensor from.
+    /// The result of which [Op] the tensor is.
     pub node: usize,
-    /// The specific output to pull from.
+    /// The specific output to pull from, the [Op] could result in multiple outputs
     pub output: usize,
 }
 
@@ -49,11 +50,18 @@ impl Op {
     }
 }
 
+/// Inputs which are used by an operation [Op].
+///
+/// They can either be a:
+/// * String which will be used to fetch the actual Tensor from a dictionary later
+/// (a HashMap<String, Tensor> for example)
+/// * Internal which holds the index of the node in the [Graph] from where to get the input from
 #[derive(Clone, Debug)]
 pub enum Input {
-    // An input from the feed dict.
+    /// A String corresponding to the Key to use when fetching the actual Tensor from the feed dict.
+    /// For example, if we had a HashMap<String, Tensor>
     Feed(String),
-    // An input from another node in the graph.
+    /// An input from another node in the [Graph].
     Internal(Internal),
 }
 
@@ -73,7 +81,7 @@ impl From<&str> for Input {
 
 #[derive(Clone, Default, Debug)]
 pub struct Graph {
-    /// A series of ops refering to each other's outputs for their input.
+    /// A series of [Op]s referring to each other's outputs for their input.
     pub ops: Vec<Op>,
 }
 
@@ -97,7 +105,7 @@ impl Graph {
         input
     }
 
-    /// Returns the node index of the appended op.
+    /// Returns the node index of the appended [Op].
     pub fn append(&mut self, op: Op) -> usize {
         self.ops.push(op);
         self.ops.len() - 1
@@ -105,10 +113,17 @@ impl Graph {
 }
 
 pub trait Backend {
-    type Inputs;
-    type Internal;
+    /// The inputs where to get the actual Tensors from.
+    /// Could be for example a HashMap<String, Tensor>
+    type TensorDict;
+    /// Same internal storage.
+    /// Could be used, for example, to stores all the intermediary computations of the whole graph.
+    type InternalStorage;
+    /// The actual Tensor type used by this backend, for example `CudaFloat` or `ArcArray`
     type Tensor;
+    /// The delta stores a map from nodes in the graph to their received gradient.
     type Delta;
+    /// State contains all state data (internal tensors that are being trained or static).
     type State;
     type Error;
 
@@ -122,11 +137,11 @@ pub trait Backend {
         &self,
         graph: &Graph,
         state: &Self::State,
-        inputs: &Self::Inputs,
+        inputs: &Self::TensorDict,
         tensor: Input,
-    ) -> Result<(Self::Tensor, Self::Internal), Self::Error>;
+    ) -> Result<(Self::Tensor, Self::InternalStorage), Self::Error>;
 
-    /// Propogates a delta from the output back to the input via chain rule
+    /// Propagates a delta from the output back to the input via chain rule
     /// and produces a `Delta` that can be used to update the graph
     /// with an optimizer. The `Delta` contains all the dE/dx of all internal
     /// variables.
@@ -134,8 +149,8 @@ pub trait Backend {
         &self,
         graph: &Graph,
         state: &Self::State,
-        internal: &Self::Internal,
-        inputs: &Self::Inputs,
+        internal: &Self::InternalStorage,
+        inputs: &Self::TensorDict,
         tensor: Input,
         output_delta: Self::Tensor,
     ) -> Result<Self::Delta, Self::Error>;

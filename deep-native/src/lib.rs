@@ -104,12 +104,12 @@ impl FromIterator<Box<dyn Handler>> for Native {
 
 impl Backend for Native {
     /// The input is a feed dict from strings to tensors.
-    type Inputs = HashMap<String, Tsor>;
+    type TensorDict = HashMap<String, Tsor>;
     /// The internal type stores all the intermediary computations of the whole graph.
-    type Internal = Tape<Self>;
-    /// Tensor type is `ndarray`'s `ArcArray` over dynamic dimension.
+    type InternalStorage = Tape<Self>;
+    /// Tensor type is [ndarray]'s [ArcArray] over dynamic dimension.
     type Tensor = Tsor;
-    /// The delta stores a map from nodes in the graph to their recieved gradient.
+    /// The delta stores a map from nodes in the graph to their received gradient.
     type Delta = AccumulateTensors<Tsor>;
     /// State contains all state data (internal tensors that are being trained or static).
     type State = Vec<Vec<Tsor>>;
@@ -139,9 +139,9 @@ impl Backend for Native {
         &self,
         graph: &Graph,
         state: &Self::State,
-        inputs: &Self::Inputs,
+        inputs: &Self::TensorDict,
         tensor: Input,
-    ) -> Result<(Self::Tensor, Self::Internal)> {
+    ) -> Result<(Self::Tensor, Self::InternalStorage)> {
         let mut tape = Tape::new();
         tape.solve(self, graph, &state[..], inputs, tensor)
             .map(|tensor| (tensor, tape))
@@ -155,8 +155,8 @@ impl Backend for Native {
         &self,
         graph: &Graph,
         state: &Self::State,
-        internal: &Self::Internal,
-        inputs: &Self::Inputs,
+        internal: &Self::InternalStorage,
+        inputs: &Self::TensorDict,
         tensor: Input,
         output_delta: Self::Tensor,
     ) -> Result<Self::Delta> {
@@ -192,7 +192,7 @@ impl Immediate for Native {
 }
 
 impl Propogate for Native {
-    fn propogate(
+    fn propagate(
         &self,
         imop: ImOp<Self>,
         state: &[Tsor],

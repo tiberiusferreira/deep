@@ -4,6 +4,8 @@ use std::cell::RefCell;
 use std::ops::{Add, Sub};
 use std::rc::Rc;
 
+/// Stores the operations done to arrive at the final Tensor value in its [Graph]
+/// The input field store where the input comes from
 pub struct Tensor {
     graph: Rc<RefCell<Graph>>,
     input: Input,
@@ -41,7 +43,7 @@ impl Tensor {
         &self,
         backend: &B,
         state: &B::State,
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
     ) -> Result<B::Tensor, B::Error>
     where
         B: Backend,
@@ -60,7 +62,7 @@ impl Tensor {
         &self,
         backend: &B,
         state: &mut B::State,
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
         learning_rate: f32,
         tensor_loss: fn(B::Tensor) -> f32,
         delta_tensor: fn(f32) -> B::Tensor,
@@ -94,6 +96,8 @@ impl Tensor {
     }
 }
 
+/// Creates a Tensor with an empty [Graph], no Ops. Its value will be fetched from the
+/// [Backend::TensorDict] using the provided String as key
 impl From<&str> for Tensor {
     fn from(s: &str) -> Tensor {
         Tensor {
@@ -103,15 +107,21 @@ impl From<&str> for Tensor {
     }
 }
 
+/// Merges the graph associated with b tensor with the graph associated with a,
+/// appending b into the end of a.
+/// Shifts the b inputs by the length of a, so they "point" to the right place still
+/// Puts it all into a new Tensor and returns it
 fn merge2_1(a: Tensor, b: Tensor, make_op: impl Fn(Input, Input) -> Op) -> Tensor {
-    let graph = a.graph;
-    let a = a.input;
-    let b = graph
+    let a_graph = a.graph;
+    let a_input = a.input;
+    let a_with_b_merged = a_graph
         .borrow_mut()
         .merge_input(b.graph.borrow().clone(), b.input);
-    let node = graph.borrow_mut().append(make_op(a, b));
+    let node = a_graph
+        .borrow_mut()
+        .append(make_op(a_input, a_with_b_merged));
     Tensor {
-        graph,
+        graph: a_graph,
         input: Input::Internal(Internal { node, output: 0 }),
     }
 }

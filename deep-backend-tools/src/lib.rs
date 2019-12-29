@@ -22,13 +22,15 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 type SResult<T, E> = std::result::Result<T, E>;
 
+/// This trait defines a single method, which fetches a Tensor from its Inputs by name
 pub trait Feed: Backend {
-    fn feed(&self, inputs: &Self::Inputs, name: &str) -> Option<Self::Tensor>;
+    /// Fetches a Tensor from its Inputs (likely a HashMap) by name
+    fn feed(&self, inputs: &Self::TensorDict, name: &str) -> Option<Self::Tensor>;
 }
 
 impl<B, T> Feed for B
 where
-    B: Backend<Inputs = HashMap<String, T>, Tensor = T>,
+    B: Backend<TensorDict = HashMap<String, T>, Tensor = T>,
     T: Clone,
 {
     fn feed(&self, inputs: &HashMap<String, T>, name: &str) -> Option<T> {
@@ -48,7 +50,7 @@ pub trait Propogate: Backend {
     /// then it should panic at runtime as that is a developer error. It should not return `None`.
     /// Returning `None` should only be done if the operation was not registered with the backend.
     /// All other issues are programmatic issues and should panic.
-    fn propogate(
+    fn propagate(
         &self,
         imop: ImOp<Self>,
         state: &[Self::Tensor],
@@ -84,7 +86,7 @@ where
     pub fn input(
         &self,
         backend: &B,
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
         graph: &Graph,
         input: Input,
     ) -> Result<B::Tensor>
@@ -112,7 +114,7 @@ where
         backend: &B,
         graph: &Graph,
         state: &[Vec<B::Tensor>],
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
         input: Input,
     ) -> Result<B::Tensor>
     where
@@ -153,7 +155,7 @@ where
         backend: &B,
         graph: &Graph,
         state: &[Vec<B::Tensor>],
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
         input: Input,
         output_delta: B::Tensor,
         deltas: E,
@@ -233,7 +235,7 @@ where
         backend: &B,
         graph: &Graph,
         state: &[Vec<B::Tensor>],
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
     ) -> Result<Self>
     where
         B: Feed + Immediate,
@@ -258,7 +260,7 @@ where
         backend: &B,
         graph: &Graph,
         state: &[Vec<B::Tensor>],
-        inputs: &B::Inputs,
+        inputs: &B::TensorDict,
         output_delta: B::Tensor,
         deltas: E,
     ) -> Result<E>
@@ -276,7 +278,7 @@ where
         // This calls backend.propogate to invoke the actual implementation of the backprop for this op.
         let gradients = |imop| {
             backend
-                .propogate(
+                .propagate(
                     imop,
                     state
                         .get(internal.node)
